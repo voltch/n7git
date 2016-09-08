@@ -284,6 +284,7 @@ static ssize_t set_enable_irq(struct device *dev,
 		return -1;
 
 	pr_info("[SSP] %s - %d start\n", __func__, dTemp);
+	mutex_lock(&data->ssp_enable_mutex);
 	if (dTemp) {
 		reset_mcu(data);
 		enable_debug_timer(data);
@@ -292,6 +293,7 @@ static ssize_t set_enable_irq(struct device *dev,
 		ssp_enable(data, 0);
 	} else
 		pr_err("[SSP] %s - invalid value\n", __func__);
+	mutex_unlock(&data->ssp_enable_mutex);
 	pr_info("[SSP] %s - %d end\n", __func__, dTemp);
 	return size;
 }
@@ -949,6 +951,35 @@ static ssize_t set_data_injection_enable(struct device *dev,
 	return size;
 }
 
+#if defined (CONFIG_SENSORS_SSP_VLTE)
+static ssize_t show_lcd_check_fold_state(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct ssp_data *data  = dev_get_drvdata(dev);
+	return sprintf(buf, "%d\n", data->change_axis);
+	
+}
+
+static ssize_t set_lcd_check_fold_state(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct ssp_data *data = dev_get_drvdata(dev);
+
+	if(folder_state == 1) // folding state
+	{
+		data->change_axis = true;
+		pr_err("[SSP]: %s - change_axis %d\n", __func__, data->change_axis);
+	}
+	else // spread state
+	{
+		data->change_axis = false;
+		pr_err("[SSP]: %s - change_axis %d\n", __func__, data->change_axis);
+	}
+	
+	return size;
+}
+#endif
+
 static ssize_t show_sensor_state(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
@@ -1031,6 +1062,11 @@ static struct device_attribute dev_attr_step_cnt_poll_delay
 static DEVICE_ATTR(data_injection_enable, S_IRUGO | S_IWUSR | S_IWGRP,
 	show_data_injection_enable, set_data_injection_enable);
 
+#if defined (CONFIG_SENSORS_SSP_VLTE)
+static DEVICE_ATTR(lcd_check_fold_state, S_IRUGO | S_IWUSR | S_IWGRP,
+	show_lcd_check_fold_state, set_lcd_check_fold_state);
+#endif
+
 static DEVICE_ATTR(sensor_state, S_IRUGO, show_sensor_state, NULL);
 
 static struct device_attribute *mcu_attrs[] = {
@@ -1059,6 +1095,9 @@ static struct device_attribute *mcu_attrs[] = {
 	&dev_attr_ssp_flush,
 	&dev_attr_shake_cam,
 	&dev_attr_data_injection_enable,
+#if defined (CONFIG_SENSORS_SSP_VLTE)
+	&dev_attr_lcd_check_fold_state,
+#endif
 	&dev_attr_sensor_state,
 	NULL,
 };
@@ -1256,6 +1295,17 @@ static struct file_operations ssp_data_injection_fops = {
 	.write = ssp_data_injection_write,
 
 };
+
+#if defined (CONFIG_SENSORS_SSP_VLTE)
+int folder_state;
+int ssp_ckeck_lcd(int state)
+{
+	folder_state = state;
+	pr_info("[SSP] %s folder_state %d \n", __func__, folder_state);
+
+	return folder_state;
+}
+#endif
 
 static void initialize_mcu_factorytest(struct ssp_data *data)
 {
